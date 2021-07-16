@@ -1,0 +1,32 @@
+package types
+
+import (
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	clienttypes "github.com/cosmos/ibc-go/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/modules/core/exported"
+)
+
+var _ exported.ConsensusState = &ConsensusState{}
+
+// ClientType returns Multisig type.
+func (ConsensusState) ClientType() string {
+	return Mock
+}
+
+// GetTimestamp returns zero.
+func (cs ConsensusState) GetTimestamp() uint64 {
+	return cs.Timestamp
+}
+
+// GetRoot returns nil since Multisigs do not have roots.
+func (cs ConsensusState) GetRoot() exported.Root {
+	return nil
+}
+
+// ValidateBasic defines basic validation for the Multisig consensus state.
+func (cs ConsensusState) ValidateBasic() error {
+	if cs.Timestamp == 0 {
+		return sdkerrors.Wrap(clienttypes.ErrInvalidConsensus, "timestamp cannot be 0")
+	}
+	return nil
+}
