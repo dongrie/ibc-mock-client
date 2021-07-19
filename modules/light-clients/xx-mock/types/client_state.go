@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	Mock string = "mock"
+	Mock string = "mock-client"
 )
 
 var _ exported.ClientState = (*ClientState)(nil)
