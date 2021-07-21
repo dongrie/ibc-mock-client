@@ -1,4 +1,4 @@
-package multisig
+package mock
 
 import (
 	"encoding/json"

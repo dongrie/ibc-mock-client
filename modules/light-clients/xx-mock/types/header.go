@@ -7,7 +7,7 @@ import (
 
 var _ exported.Header = &Header{}
 
-// ClientType defines that the Header is a Multisig.
+// ClientType return the client identifier of mock-client.
 func (Header) ClientType() string {
 	return Mock
 }

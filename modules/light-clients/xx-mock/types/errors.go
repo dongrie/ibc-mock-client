@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	ModuleName = "Multisig"
+	ModuleName = "mock-client"
 )
 
 var (
@@ -13,6 +13,6 @@ var (
 	ErrInvalidSequence             = sdkerrors.Register(ModuleName, 3, "invalid sequence")
 	ErrInvalidSignatureAndData     = sdkerrors.Register(ModuleName, 4, "invalid signature and data")
 	ErrSignatureVerificationFailed = sdkerrors.Register(ModuleName, 5, "signature verification failed")
-	ErrInvalidProof                = sdkerrors.Register(ModuleName, 6, "invalid Multisig proof")
+	ErrInvalidProof                = sdkerrors.Register(ModuleName, 6, "invalid Mock proof")
 	ErrInvalidDataType             = sdkerrors.Register(ModuleName, 7, "invalid data type")
 )

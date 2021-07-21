@@ -8,7 +8,7 @@ import (
 
 var _ exported.ConsensusState = &ConsensusState{}
 
-// ClientType returns Multisig type.
+// ClientType returns mock-client type.
 func (ConsensusState) ClientType() string {
 	return Mock
 }
@@ -18,12 +18,12 @@ func (cs ConsensusState) GetTimestamp() uint64 {
 	return cs.Timestamp
 }
 
-// GetRoot returns nil since Multisigs do not have roots.
+// GetRoot returns nil since mock-client do not have roots.
 func (cs ConsensusState) GetRoot() exported.Root {
 	return nil
 }
 
-// ValidateBasic defines basic validation for the Multisig consensus state.
+// ValidateBasic defines basic validation for the mock-client consensus state.
 func (cs ConsensusState) ValidateBasic() error {
 	if cs.Timestamp == 0 {
 		return sdkerrors.Wrap(clienttypes.ErrInvalidConsensus, "timestamp cannot be 0")

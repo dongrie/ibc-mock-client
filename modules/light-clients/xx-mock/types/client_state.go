@@ -57,7 +57,7 @@ func (cs ClientState) Validate() error {
 	return nil
 }
 
-// ZeroCustomFields returns Multisig client state with client-specific fields FrozenSequence,
+// ZeroCustomFields returns Mock client state with client-specific fields FrozenSequence,
 // and AllowUpdateAfterProposal zeroed out
 func (cs ClientState) ZeroCustomFields() exported.ClientState {
 	return &ClientState{}
@@ -68,21 +68,21 @@ func (cs ClientState) Initialize(_ sdk.Context, _ codec.BinaryCodec, _ sdk.KVSto
 	return nil
 }
 
-// ExportMetadata is a no-op since Multisig does not store any metadata in client store
+// ExportMetadata is a no-op since Mock does not store any metadata in client store
 func (cs ClientState) ExportMetadata(_ sdk.KVStore) []exported.GenesisMetadata {
 	return nil
 }
 
-// VerifyUpgradeAndUpdateState returns an error since Multisig client does not support upgrades
+// VerifyUpgradeAndUpdateState returns an error since Mock client does not support upgrades
 func (cs ClientState) VerifyUpgradeAndUpdateState(
 	_ sdk.Context, _ codec.BinaryCodec, _ sdk.KVStore,
 	_ exported.ClientState, _ exported.ConsensusState, _, _ []byte,
 ) (exported.ClientState, exported.ConsensusState, error) {
-	return nil, nil, sdkerrors.Wrap(clienttypes.ErrInvalidUpgradeClient, "cannot upgrade Multisig client")
+	return nil, nil, sdkerrors.Wrap(clienttypes.ErrInvalidUpgradeClient, "cannot upgrade Mock client")
 }
 
 // VerifyClientState verifies a proof of the client state of the running chain
-// stored on the Multisig.
+// stored on the Mock.
 func (cs ClientState) VerifyClientState(
 	store sdk.KVStore,
 	cdc codec.BinaryCodec,
@@ -115,7 +115,7 @@ func (cs ClientState) VerifyClientState(
 }
 
 // VerifyClientConsensusState verifies a proof of the consensus state of the
-// running chain stored on the Multisig.
+// running chain stored on the Mock.
 func (cs ClientState) VerifyClientConsensusState(
 	store sdk.KVStore,
 	cdc codec.BinaryCodec,
