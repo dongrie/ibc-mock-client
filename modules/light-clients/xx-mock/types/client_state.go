@@ -126,25 +126,7 @@ func (cs ClientState) VerifyClientConsensusState(
 	proof []byte,
 	consensusState exported.ConsensusState,
 ) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-
-	anyConsensusState, err := clienttypes.PackConsensusState(consensusState)
-	if err != nil {
-		return err
-	}
-
-	bz, err := cdc.Marshal(anyConsensusState)
-	if err != nil {
-		return err
-	}
-
-	h := sha256.Sum256(bz)
-	if !bytes.Equal(proof, h[:]) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, h)
-	}
+	// NOTE In cosmos/ibc-go, it cannot give a consensus state of an external prover(e.g. mock-client) to the client, so we skip this verification for now.
 	return nil
 }
 
