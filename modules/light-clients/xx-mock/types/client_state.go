@@ -38,7 +38,7 @@ func (cs ClientState) ClientType() string {
 // GetLatestHeight returns the latest height.
 // Return exported.Height to satisfy ClientState interface
 func (cs ClientState) GetLatestHeight() exported.Height {
-	return cs.LatestHeight
+	return *cs.LatestHeight
 }
 
 // Status returns the status of the mock client.

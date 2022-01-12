@@ -15,7 +15,7 @@ func (Header) ClientType() string {
 // Return clientexported.Height to satisfy interface
 // Revision number is always 0 for a solo-machine
 func (h Header) GetHeight() exported.Height {
-	return h.Height
+	return *h.Height
 }
 
 // ValidateBasic ensures that the sequence, signature and public key have all
