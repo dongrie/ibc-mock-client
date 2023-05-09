@@ -8,7 +8,7 @@ option go_package = "github.com/datachainlab/ibc-mock-client/modules/light-clien
 option (gogoproto.goproto_getters_all)  = false;
 
 message ClientState {
-  ibc.core.client.v1.Height latest_height = 1;
+  ibc.core.client.v1.Height latest_height = 1 [(gogoproto.nullable) = false];
 }
 
 message ConsensusState {
@@ -16,6 +16,6 @@ message ConsensusState {
 }
 
 message Header {
-  ibc.core.client.v1.Height height = 1;
+  ibc.core.client.v1.Height height = 1 [(gogoproto.nullable) = false];
   uint64 timestamp = 2;
 }

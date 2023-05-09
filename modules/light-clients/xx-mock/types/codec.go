@@ -9,7 +9,7 @@ import (
 // Any.
 func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 	registry.RegisterImplementations(
-		(*exported.Header)(nil),
+		(*exported.ClientMessage)(nil),
 		&Header{},
 	)
 	registry.RegisterImplementations(
