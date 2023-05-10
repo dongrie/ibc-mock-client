@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 
-	ics23 "github.com/cosmos/ics23/go"
-
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -60,11 +58,6 @@ func (cs ClientState) Status(_ sdk.Context, _ sdk.KVStore, _ codec.BinaryCodec) 
 
 // Validate performs a basic validation of the client state fields.
 func (cs ClientState) Validate() error {
-	return nil
-}
-
-// GetProofSpecs returns nil proof specs since Mock client doesn't use merkle proof.
-func (cs ClientState) GetProofSpecs() []*ics23.ProofSpec {
 	return nil
 }
 
