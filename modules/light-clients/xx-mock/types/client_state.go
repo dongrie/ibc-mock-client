@@ -3,18 +3,12 @@ package types
 import (
 	"bytes"
 	"crypto/sha256"
-	"fmt"
-
-	ics23 "github.com/confio/ics23/go"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	connectiontypes "github.com/cosmos/ibc-go/v4/modules/core/03-connection/types"
-	channeltypes "github.com/cosmos/ibc-go/v4/modules/core/04-channel/types"
-	commitmenttypes "github.com/cosmos/ibc-go/v4/modules/core/23-commitment/types"
-	"github.com/cosmos/ibc-go/v4/modules/core/exported"
+	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 )
 
 const (
@@ -24,9 +18,9 @@ const (
 var _ exported.ClientState = (*ClientState)(nil)
 
 // NewClientState creates a new ClientState instance.
-func NewClientState(latestHeight clienttypes.Height, allowUpdateAfterProposal bool) *ClientState {
+func NewClientState(latestHeight clienttypes.Height) *ClientState {
 	return &ClientState{
-		LatestHeight: &latestHeight,
+		LatestHeight: latestHeight,
 	}
 }
 
@@ -38,7 +32,22 @@ func (cs ClientState) ClientType() string {
 // GetLatestHeight returns the latest height.
 // Return exported.Height to satisfy ClientState interface
 func (cs ClientState) GetLatestHeight() exported.Height {
-	return *cs.LatestHeight
+	return cs.LatestHeight
+}
+
+// GetTimestampAtHeight returns the timestamp in nanoseconds of the consensus state at the given height.
+func (cs ClientState) GetTimestampAtHeight(
+	ctx sdk.Context,
+	clientStore sdk.KVStore,
+	cdc codec.BinaryCodec,
+	height exported.Height,
+) (uint64, error) {
+	// get consensus state at height from clientStore to check for expiry
+	consState, found := getConsensusState(clientStore, cdc, height)
+	if !found {
+		return 0, sdkerrors.Wrapf(clienttypes.ErrConsensusStateNotFound, "height (%s)", height)
+	}
+	return consState.GetTimestamp(), nil
 }
 
 // Status returns the status of the mock client.
@@ -47,29 +56,102 @@ func (cs ClientState) Status(_ sdk.Context, _ sdk.KVStore, _ codec.BinaryCodec) 
 	return exported.Active
 }
 
-// GetProofSpecs returns nil proof specs since client state verification uses signatures.
-func (cs ClientState) GetProofSpecs() []*ics23.ProofSpec {
-	return nil
-}
-
-// Validate performs basic validation of the client state fields.
+// Validate performs a basic validation of the client state fields.
 func (cs ClientState) Validate() error {
 	return nil
 }
 
-// ZeroCustomFields returns Mock client state with client-specific fields FrozenSequence,
-// and AllowUpdateAfterProposal zeroed out
+// ZeroCustomFields returns a ClientState that is a copy of the current ClientState
+// with all client customizable fields zeroed out (but Mock ClientState has no such field)
 func (cs ClientState) ZeroCustomFields() exported.ClientState {
-	return &ClientState{}
+	return &ClientState{
+		LatestHeight: cs.LatestHeight,
+	}
 }
 
 // Initialize will check that initial consensus state is equal to the latest consensus state of the initial client.
-func (cs ClientState) Initialize(_ sdk.Context, _ codec.BinaryCodec, _ sdk.KVStore, consState exported.ConsensusState) error {
+func (cs ClientState) Initialize(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, consState exported.ConsensusState) error {
+	consensusState, ok := consState.(*ConsensusState)
+	if !ok {
+		return sdkerrors.Wrapf(clienttypes.ErrInvalidConsensus, "invalid initial consensus state. expected type: %T, got: %T",
+			&ConsensusState{}, consState)
+	}
+
+	setClientState(clientStore, cdc, &cs)
+	setConsensusState(clientStore, cdc, consensusState, cs.GetLatestHeight())
+	setConsensusMetadata(ctx, clientStore, cs.GetLatestHeight())
+
+	return nil
+
+}
+
+// VerifyMembership is a generic proof verification method which verifies a proof of the existence of a value at a given CommitmentPath at the specified height.
+// The caller is expected to construct the full CommitmentPath from a CommitmentPrefix and a standardized path (as defined in ICS 24).
+func (cs ClientState) VerifyMembership(
+	ctx sdk.Context,
+	clientStore sdk.KVStore,
+	cdc codec.BinaryCodec,
+	height exported.Height,
+	delayTimePeriod uint64,
+	delayBlockPeriod uint64,
+	proof []byte,
+	path exported.Path,
+	value []byte,
+) error {
+	if cs.GetLatestHeight().LT(height) {
+		return sdkerrors.Wrapf(
+			sdkerrors.ErrInvalidHeight,
+			"client state height < proof height (%d < %d), please ensure the client has been updated", cs.GetLatestHeight(), height,
+		)
+	}
+
+	if err := verifyDelayPeriodPassed(ctx, clientStore, height, delayTimePeriod, delayBlockPeriod); err != nil {
+		return err
+	}
+
+	if _, found := getConsensusState(clientStore, cdc, height); !found {
+		return sdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
+	}
+
+	h := sha256.Sum256(value)
+	if !bytes.Equal(proof, h[:]) {
+		return sdkerrors.Wrapf(ErrInvalidProof, "expected the proof '%X', actually got '%X'", h, proof)
+	}
+
 	return nil
 }
 
-// ExportMetadata is a no-op since Mock does not store any metadata in client store
-func (cs ClientState) ExportMetadata(_ sdk.KVStore) []exported.GenesisMetadata {
+// VerifyNonMembership is a generic proof verification method which verifies the absence of a given CommitmentPath at a specified height.
+// The caller is expected to construct the full CommitmentPath from a CommitmentPrefix and a standardized path (as defined in ICS 24).
+func (cs ClientState) VerifyNonMembership(
+	ctx sdk.Context,
+	clientStore sdk.KVStore,
+	cdc codec.BinaryCodec,
+	height exported.Height,
+	delayTimePeriod uint64,
+	delayBlockPeriod uint64,
+	proof []byte,
+	path exported.Path,
+) error {
+	if cs.GetLatestHeight().LT(height) {
+		return sdkerrors.Wrapf(
+			sdkerrors.ErrInvalidHeight,
+			"client state height < proof height (%d < %d), please ensure the client has been updated", cs.GetLatestHeight(), height,
+		)
+	}
+
+	if err := verifyDelayPeriodPassed(ctx, clientStore, height, delayTimePeriod, delayBlockPeriod); err != nil {
+		return err
+	}
+
+	if _, found := getConsensusState(clientStore, cdc, height); !found {
+		return sdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
+	}
+
+	if len(proof) != 0 {
+		return sdkerrors.Wrapf(ErrInvalidProof, "expected the empty proof, actually got '%X'", proof)
+	}
+
 	return nil
 }
 
@@ -77,269 +159,47 @@ func (cs ClientState) ExportMetadata(_ sdk.KVStore) []exported.GenesisMetadata {
 func (cs ClientState) VerifyUpgradeAndUpdateState(
 	_ sdk.Context, _ codec.BinaryCodec, _ sdk.KVStore,
 	_ exported.ClientState, _ exported.ConsensusState, _, _ []byte,
-) (exported.ClientState, exported.ConsensusState, error) {
-	return nil, nil, sdkerrors.Wrap(clienttypes.ErrInvalidUpgradeClient, "cannot upgrade Mock client")
-}
-
-// VerifyClientState verifies a proof of the client state of the running chain
-// stored on the Mock.
-func (cs ClientState) VerifyClientState(
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	prefix exported.Prefix,
-	counterpartyClientIdentifier string,
-	proof []byte,
-	clientState exported.ClientState,
 ) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-
-	anyClientState, err := clienttypes.PackClientState(clientState)
-	if err != nil {
-		return err
-	}
-
-	bz, err := cdc.Marshal(anyClientState)
-	if err != nil {
-		return err
-	}
-
-	h := sha256.Sum256(bz)
-	if !bytes.Equal(proof, h[:]) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, h)
-	}
-	return nil
+	return sdkerrors.Wrap(clienttypes.ErrInvalidUpgradeClient, "cannot upgrade Mock client")
 }
 
-// VerifyClientConsensusState verifies a proof of the consensus state of the
-// running chain stored on the Mock.
-func (cs ClientState) VerifyClientConsensusState(
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	counterpartyClientIdentifier string,
-	consensusHeight exported.Height,
-	prefix exported.Prefix,
-	proof []byte,
-	consensusState exported.ConsensusState,
-) error {
-	// NOTE In cosmos/ibc-go, it cannot give a consensus state of an external prover(e.g. mock-client) to the client, so we skip this verification for now.
+// verifyDelayPeriodPassed will ensure that at least delayTimePeriod amount of time and delayBlockPeriod number of blocks have passed
+// since consensus state was submitted before allowing verification to continue.
+func verifyDelayPeriodPassed(ctx sdk.Context, store sdk.KVStore, proofHeight exported.Height, delayTimePeriod, delayBlockPeriod uint64) error {
+	if delayTimePeriod != 0 {
+		// check that executing chain's timestamp has passed consensusState's processed time + delay time period
+		processedTime, ok := getProcessedTime(store, proofHeight)
+		if !ok {
+			return sdkerrors.Wrapf(ErrProcessedTimeNotFound, "processed time not found for height: %s", proofHeight)
+		}
+
+		currentTimestamp := uint64(ctx.BlockTime().UnixNano())
+		validTime := processedTime + delayTimePeriod
+
+		// NOTE: delay time period is inclusive, so if currentTimestamp is validTime, then we return no error
+		if currentTimestamp < validTime {
+			return sdkerrors.Wrapf(ErrDelayPeriodNotPassed, "cannot verify packet until time: %d, current time: %d",
+				validTime, currentTimestamp)
+		}
+
+	}
+
+	if delayBlockPeriod != 0 {
+		// check that executing chain's height has passed consensusState's processed height + delay block period
+		processedHeight, ok := getProcessedHeight(store, proofHeight)
+		if !ok {
+			return sdkerrors.Wrapf(ErrProcessedHeightNotFound, "processed height not found for height: %s", proofHeight)
+		}
+
+		currentHeight := clienttypes.GetSelfHeight(ctx)
+		validHeight := clienttypes.NewHeight(processedHeight.GetRevisionNumber(), processedHeight.GetRevisionHeight()+delayBlockPeriod)
+
+		// NOTE: delay block period is inclusive, so if currentHeight is validHeight, then we return no error
+		if currentHeight.LT(validHeight) {
+			return sdkerrors.Wrapf(ErrDelayPeriodNotPassed, "cannot verify packet until height: %s, current height: %s",
+				validHeight, currentHeight)
+		}
+	}
+
 	return nil
-}
-
-// VerifyConnectionState verifies a proof of the connection state of the
-// specified connection end stored on the target machine.
-func (cs ClientState) VerifyConnectionState(
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	prefix exported.Prefix,
-	proof []byte,
-	connectionID string,
-	connectionEnd exported.ConnectionI,
-) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-
-	connection, ok := connectionEnd.(connectiontypes.ConnectionEnd)
-	if !ok {
-		return sdkerrors.Wrapf(
-			connectiontypes.ErrInvalidConnection,
-			"expected type %T, got %T", connectiontypes.ConnectionEnd{}, connectionEnd,
-		)
-	}
-
-	bz, err := cdc.Marshal(&connection)
-	if err != nil {
-		return err
-	}
-
-	h := sha256.Sum256(bz)
-	if !bytes.Equal(proof, h[:]) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, h)
-	}
-	return nil
-}
-
-// VerifyChannelState verifies a proof of the channel state of the specified
-// channel end, under the specified port, stored on the target machine.
-func (cs ClientState) VerifyChannelState(
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	prefix exported.Prefix,
-	proof []byte,
-	portID,
-	channelID string,
-	channelEnd exported.ChannelI,
-) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-
-	channel, ok := channelEnd.(channeltypes.Channel)
-	if !ok {
-		return sdkerrors.Wrapf(
-			channeltypes.ErrInvalidChannel,
-			"expected channel type %T, got %T", channeltypes.Channel{}, channelEnd)
-	}
-
-	bz, err := cdc.Marshal(&channel)
-	if err != nil {
-		return err
-	}
-
-	h := sha256.Sum256(bz)
-	if !bytes.Equal(proof, h[:]) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, h)
-	}
-	return nil
-}
-
-// VerifyPacketCommitment verifies a proof of an outgoing packet commitment at
-// the specified port, specified channel, and specified sequence.
-func (cs ClientState) VerifyPacketCommitment(
-	ctx sdk.Context,
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	_ uint64,
-	_ uint64,
-	prefix exported.Prefix,
-	proof []byte,
-	portID,
-	channelID string,
-	packetSequence uint64,
-	commitmentBytes []byte,
-) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(proof, commitmentBytes) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, commitmentBytes)
-	}
-	return nil
-}
-
-// VerifyPacketAcknowledgement verifies a proof of an incoming packet
-// acknowledgement at the specified port, specified channel, and specified sequence.
-func (cs ClientState) VerifyPacketAcknowledgement(
-	ctx sdk.Context,
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	_ uint64,
-	_ uint64,
-	prefix exported.Prefix,
-	proof []byte,
-	portID,
-	channelID string,
-	packetSequence uint64,
-	acknowledgement []byte,
-) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-	commitmentBytes := channeltypes.CommitAcknowledgement(acknowledgement)
-	if !bytes.Equal(proof, commitmentBytes) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, commitmentBytes)
-	}
-	return nil
-}
-
-// VerifyPacketReceiptAbsence verifies a proof of the absence of an
-// incoming packet receipt at the specified port, specified channel, and
-// specified sequence.
-func (cs ClientState) VerifyPacketReceiptAbsence(
-	ctx sdk.Context,
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	_ uint64,
-	_ uint64,
-	prefix exported.Prefix,
-	proof []byte,
-	portID,
-	channelID string,
-	packetSequence uint64,
-) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-	commitmentBytes := sha256.Sum256([]byte(fmt.Sprintf("%v/%v/%v", portID, channelID, packetSequence)))
-	if !bytes.Equal(proof, commitmentBytes[:]) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, commitmentBytes)
-	}
-	return nil
-}
-
-// VerifyNextSequenceRecv verifies a proof of the next sequence number to be
-// received of the specified channel at the specified port.
-func (cs ClientState) VerifyNextSequenceRecv(
-	ctx sdk.Context,
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	height exported.Height,
-	_ uint64,
-	_ uint64,
-	prefix exported.Prefix,
-	proof []byte,
-	portID,
-	channelID string,
-	nextSequenceRecv uint64,
-) error {
-	_, err := produceVerificationArgs(store, cdc, cs, height, prefix, proof)
-	if err != nil {
-		return err
-	}
-	commitmentBytes := sha256.Sum256([]byte(fmt.Sprintf("%v/%v/%v", portID, channelID, nextSequenceRecv)))
-	if !bytes.Equal(proof, commitmentBytes[:]) {
-		return fmt.Errorf("expected the proof '%X', actually got '%X'", proof, commitmentBytes)
-	}
-	return nil
-}
-
-// produceVerificationArgs perfoms the basic checks on the arguments that are
-// shared between the verification functions and returns the public key of the
-// consensus state, the unmarshalled proof representing the signature and timestamp
-// along with the solo-machine sequence encoded in the proofHeight.
-func produceVerificationArgs(
-	store sdk.KVStore,
-	cdc codec.BinaryCodec,
-	cs ClientState,
-	height exported.Height,
-	prefix exported.Prefix,
-	proof []byte,
-) (*ConsensusState, error) {
-	if revision := height.GetRevisionNumber(); revision != 0 {
-		return nil, sdkerrors.Wrapf(sdkerrors.ErrInvalidHeight, "revision must be 0 for Mock, got revision-number: %d", revision)
-	}
-
-	if prefix == nil {
-		return nil, sdkerrors.Wrap(commitmenttypes.ErrInvalidPrefix, "prefix cannot be empty")
-	}
-
-	_, ok := prefix.(*commitmenttypes.MerklePrefix)
-	if !ok {
-		return nil, sdkerrors.Wrapf(commitmenttypes.ErrInvalidPrefix, "invalid prefix type %T, expected MerklePrefix", prefix)
-	}
-
-	if proof == nil {
-		return nil, sdkerrors.Wrap(ErrInvalidProof, "proof cannot be empty")
-	}
-
-	cons, err := getConsensusState(store, cdc, height)
-	if err != nil {
-		return nil, err
-	}
-	return cons, nil
 }

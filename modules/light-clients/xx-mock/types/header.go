@@ -1,10 +1,10 @@
 package types
 
 import (
-	"github.com/cosmos/ibc-go/v4/modules/core/exported"
+	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 )
 
-var _ exported.Header = &Header{}
+var _ exported.ClientMessage = &Header{}
 
 // ClientType return the client identifier of mock-client.
 func (Header) ClientType() string {
@@ -15,7 +15,7 @@ func (Header) ClientType() string {
 // Return clientexported.Height to satisfy interface
 // Revision number is always 0 for a solo-machine
 func (h Header) GetHeight() exported.Height {
-	return *h.Height
+	return h.Height
 }
 
 // ValidateBasic ensures that the sequence, signature and public key have all
