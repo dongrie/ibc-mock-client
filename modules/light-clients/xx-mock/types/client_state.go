@@ -116,7 +116,6 @@ func (cs ClientState) VerifyMembership(
 	}
 
 	// sha256(abi.encodePacked(height.toUint128(), sha256(prefix), sha256(path), sha256(value)))
-	merklePath := path.(*commitmenttypes.MerklePath)
 	revisionNumber := height.GetRevisionNumber()
 	revisionHeight := height.GetRevisionHeight()
 
@@ -127,8 +126,18 @@ func (cs ClientState) VerifyMembership(
 	heightBig.Or(revisionNumberBig, revisionHeightBig)
 	hashHeight := sha256.Sum256(heightBig.Bytes())
 
-	hashPrefix := sha256.Sum256([]byte(merklePath.KeyPath[0]))
-	hashPath := sha256.Sum256([]byte(merklePath.KeyPath[1]))
+	merklePath := path.(*commitmenttypes.MerklePath)
+	mPrefix, err := merklePath.GetKey(0)
+	if err != nil {
+		return sdkerrors.Wrapf(err, "invalid merkle path key at index 0")
+	}
+	mPath, err := merklePath.GetKey(1)
+	if err != nil {
+		return sdkerrors.Wrapf(err, "invalid merkle path key at index 1")
+	}
+
+	hashPrefix := sha256.Sum256([]byte(mPrefix))
+	hashPath := sha256.Sum256([]byte(mPath))
 	hashValue := sha256.Sum256([]byte(value))
 
 	var combined []byte
