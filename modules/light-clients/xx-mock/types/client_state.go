@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"crypto/sha256"
+	"math/big"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -113,7 +114,29 @@ func (cs ClientState) VerifyMembership(
 		return sdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
 	}
 
-	h := sha256.Sum256(value)
+	// sha256(abi.encodePacked(height.toUint128(), sha256(prefix), sha256(path), sha256(value)))
+	prefix := "TODO"
+	revisionNumber := height.GetRevisionNumber()
+	revisionHeight := height.GetRevisionHeight()
+
+	heightBig := new(big.Int)
+	revisionNumberBig := new(big.Int).SetUint64(revisionNumber)
+	revisionNumberBig = revisionNumberBig.Lsh(revisionNumberBig, 64)
+	revisionHeightBig := new(big.Int).SetUint64(revisionHeight)
+	heightBig.Or(revisionNumberBig, revisionHeightBig)
+	hashHeight := sha256.Sum256(heightBig.Bytes())
+
+	hashPrefix := sha256.Sum256([]byte(prefix))
+	hashPath := sha256.Sum256([]byte(path.String()))
+	hashValue := sha256.Sum256([]byte(value))
+
+	var combined []byte
+	combined = append(combined, hashHeight[:]...)
+	combined = append(combined, hashPrefix[:]...)
+	combined = append(combined, hashPath[:]...)
+	combined = append(combined, hashValue[:]...)
+	h := sha256.Sum256(combined)
+
 	if !bytes.Equal(proof, h[:]) {
 		return sdkerrors.Wrapf(ErrInvalidProof, "expected the proof '%X', actually got '%X'", h, proof)
 	}
