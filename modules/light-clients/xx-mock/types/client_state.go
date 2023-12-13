@@ -126,7 +126,7 @@ func (cs ClientState) VerifyMembership(
 	heightBig.Or(revisionNumberBig, revisionHeightBig)
 	hashHeight := sha256.Sum256(heightBig.Bytes())
 
-	merklePath := path.(*commitmenttypes.MerklePath)
+	merklePath := path.(commitmenttypes.MerklePath)
 	mPrefix, err := merklePath.GetKey(0)
 	if err != nil {
 		return sdkerrors.Wrapf(err, "invalid merkle path key at index 0")
