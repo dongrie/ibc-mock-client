@@ -3,7 +3,7 @@ package types
 import (
 	"bytes"
 	"crypto/sha256"
-	"math/big"
+	"encoding/binary"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -119,12 +119,9 @@ func (cs ClientState) VerifyMembership(
 	revisionNumber := height.GetRevisionNumber()
 	revisionHeight := height.GetRevisionHeight()
 
-	heightBig := new(big.Int)
-	revisionNumberBig := new(big.Int).SetUint64(revisionNumber)
-	revisionNumberBig = revisionNumberBig.Lsh(revisionNumberBig, 64)
-	revisionHeightBig := new(big.Int).SetUint64(revisionHeight)
-	heightBig.Or(revisionNumberBig, revisionHeightBig)
-	hashHeight := sha256.Sum256(heightBig.Bytes())
+	heightBuf := make([]byte, 16)
+	binary.LittleEndian.PutUint64(heightBuf[:8], revisionHeight)
+	binary.LittleEndian.PutUint64(heightBuf[8:], revisionNumber)
 
 	merklePath := path.(commitmenttypes.MerklePath)
 	mPrefix, err := merklePath.GetKey(0)
@@ -141,7 +138,7 @@ func (cs ClientState) VerifyMembership(
 	hashValue := sha256.Sum256([]byte(value))
 
 	var combined []byte
-	combined = append(combined, hashHeight[:]...)
+	combined = append(combined, heightBuf...)
 	combined = append(combined, hashPrefix[:]...)
 	combined = append(combined, hashPath[:]...)
 	combined = append(combined, hashValue[:]...)
