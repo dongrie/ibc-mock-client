@@ -1,9 +1,9 @@
 package types
 
 import (
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	cosmossdkerrors "cosmossdk.io/errors"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 )
 
 var _ exported.ConsensusState = &ConsensusState{}
@@ -26,7 +26,7 @@ func (cs ConsensusState) GetRoot() exported.Root {
 // ValidateBasic defines basic validation for the mock-client consensus state.
 func (cs ConsensusState) ValidateBasic() error {
 	if cs.Timestamp == 0 {
-		return sdkerrors.Wrap(clienttypes.ErrInvalidConsensus, "timestamp cannot be 0")
+		return cosmossdkerrors.Wrap(clienttypes.ErrInvalidConsensus, "timestamp cannot be 0")
 	}
 	return nil
 }
