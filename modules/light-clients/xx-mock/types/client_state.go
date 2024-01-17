@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 
+	cosmossdkerrors "cosmossdk.io/errors"
+	storetypes "cosmossdk.io/store/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 )
 
 const (
@@ -38,21 +40,22 @@ func (cs ClientState) GetLatestHeight() exported.Height {
 // GetTimestampAtHeight returns the timestamp in nanoseconds of the consensus state at the given height.
 func (cs ClientState) GetTimestampAtHeight(
 	ctx sdk.Context,
-	clientStore sdk.KVStore,
+	clientStore storetypes.KVStore,
 	cdc codec.BinaryCodec,
 	height exported.Height,
 ) (uint64, error) {
 	// get consensus state at height from clientStore to check for expiry
 	consState, found := getConsensusState(clientStore, cdc, height)
 	if !found {
-		return 0, sdkerrors.Wrapf(clienttypes.ErrConsensusStateNotFound, "height (%s)", height)
+		//return 0, sdkerrors.Wrapf(clienttypes.ErrConsensusStateNotFound, "height (%s)", height)
+		return 0, cosmossdkerrors.Wrapf(clienttypes.ErrConsensusStateNotFound, "height (%s)", height)
 	}
 	return consState.GetTimestamp(), nil
 }
 
 // Status returns the status of the mock client.
 // It always returns active.
-func (cs ClientState) Status(_ sdk.Context, _ sdk.KVStore, _ codec.BinaryCodec) exported.Status {
+func (cs ClientState) Status(_ sdk.Context, _ storetypes.KVStore, _ codec.BinaryCodec) exported.Status {
 	return exported.Active
 }
 
@@ -70,10 +73,10 @@ func (cs ClientState) ZeroCustomFields() exported.ClientState {
 }
 
 // Initialize will check that initial consensus state is equal to the latest consensus state of the initial client.
-func (cs ClientState) Initialize(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, consState exported.ConsensusState) error {
+func (cs ClientState) Initialize(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, consState exported.ConsensusState) error {
 	consensusState, ok := consState.(*ConsensusState)
 	if !ok {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidConsensus, "invalid initial consensus state. expected type: %T, got: %T",
+		return cosmossdkerrors.Wrapf(clienttypes.ErrInvalidConsensus, "invalid initial consensus state. expected type: %T, got: %T",
 			&ConsensusState{}, consState)
 	}
 
@@ -89,7 +92,7 @@ func (cs ClientState) Initialize(ctx sdk.Context, cdc codec.BinaryCodec, clientS
 // The caller is expected to construct the full CommitmentPath from a CommitmentPrefix and a standardized path (as defined in ICS 24).
 func (cs ClientState) VerifyMembership(
 	ctx sdk.Context,
-	clientStore sdk.KVStore,
+	clientStore storetypes.KVStore,
 	cdc codec.BinaryCodec,
 	height exported.Height,
 	delayTimePeriod uint64,
@@ -99,7 +102,7 @@ func (cs ClientState) VerifyMembership(
 	value []byte,
 ) error {
 	if cs.GetLatestHeight().LT(height) {
-		return sdkerrors.Wrapf(
+		return cosmossdkerrors.Wrapf(
 			sdkerrors.ErrInvalidHeight,
 			"client state height < proof height (%d < %d), please ensure the client has been updated", cs.GetLatestHeight(), height,
 		)
@@ -110,12 +113,12 @@ func (cs ClientState) VerifyMembership(
 	}
 
 	if _, found := getConsensusState(clientStore, cdc, height); !found {
-		return sdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
+		return cosmossdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
 	}
 
 	h := sha256.Sum256(value)
 	if !bytes.Equal(proof, h[:]) {
-		return sdkerrors.Wrapf(ErrInvalidProof, "expected the proof '%X', actually got '%X'", h, proof)
+		return cosmossdkerrors.Wrapf(ErrInvalidProof, "expected the proof '%X', actually got '%X'", h, proof)
 	}
 
 	return nil
@@ -125,7 +128,7 @@ func (cs ClientState) VerifyMembership(
 // The caller is expected to construct the full CommitmentPath from a CommitmentPrefix and a standardized path (as defined in ICS 24).
 func (cs ClientState) VerifyNonMembership(
 	ctx sdk.Context,
-	clientStore sdk.KVStore,
+	clientStore storetypes.KVStore,
 	cdc codec.BinaryCodec,
 	height exported.Height,
 	delayTimePeriod uint64,
@@ -134,7 +137,7 @@ func (cs ClientState) VerifyNonMembership(
 	path exported.Path,
 ) error {
 	if cs.GetLatestHeight().LT(height) {
-		return sdkerrors.Wrapf(
+		return cosmossdkerrors.Wrapf(
 			sdkerrors.ErrInvalidHeight,
 			"client state height < proof height (%d < %d), please ensure the client has been updated", cs.GetLatestHeight(), height,
 		)
@@ -145,11 +148,11 @@ func (cs ClientState) VerifyNonMembership(
 	}
 
 	if _, found := getConsensusState(clientStore, cdc, height); !found {
-		return sdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
+		return cosmossdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
 	}
 
 	if len(proof) != 0 {
-		return sdkerrors.Wrapf(ErrInvalidProof, "expected the empty proof, actually got '%X'", proof)
+		return cosmossdkerrors.Wrapf(ErrInvalidProof, "expected the empty proof, actually got '%X'", proof)
 	}
 
 	return nil
@@ -157,20 +160,20 @@ func (cs ClientState) VerifyNonMembership(
 
 // VerifyUpgradeAndUpdateState returns an error since Mock client does not support upgrades
 func (cs ClientState) VerifyUpgradeAndUpdateState(
-	_ sdk.Context, _ codec.BinaryCodec, _ sdk.KVStore,
+	_ sdk.Context, _ codec.BinaryCodec, _ storetypes.KVStore,
 	_ exported.ClientState, _ exported.ConsensusState, _, _ []byte,
 ) error {
-	return sdkerrors.Wrap(clienttypes.ErrInvalidUpgradeClient, "cannot upgrade Mock client")
+	return cosmossdkerrors.Wrap(clienttypes.ErrInvalidUpgradeClient, "cannot upgrade Mock client")
 }
 
 // verifyDelayPeriodPassed will ensure that at least delayTimePeriod amount of time and delayBlockPeriod number of blocks have passed
 // since consensus state was submitted before allowing verification to continue.
-func verifyDelayPeriodPassed(ctx sdk.Context, store sdk.KVStore, proofHeight exported.Height, delayTimePeriod, delayBlockPeriod uint64) error {
+func verifyDelayPeriodPassed(ctx sdk.Context, store storetypes.KVStore, proofHeight exported.Height, delayTimePeriod, delayBlockPeriod uint64) error {
 	if delayTimePeriod != 0 {
 		// check that executing chain's timestamp has passed consensusState's processed time + delay time period
 		processedTime, ok := getProcessedTime(store, proofHeight)
 		if !ok {
-			return sdkerrors.Wrapf(ErrProcessedTimeNotFound, "processed time not found for height: %s", proofHeight)
+			return cosmossdkerrors.Wrapf(ErrProcessedTimeNotFound, "processed time not found for height: %s", proofHeight)
 		}
 
 		currentTimestamp := uint64(ctx.BlockTime().UnixNano())
@@ -178,7 +181,7 @@ func verifyDelayPeriodPassed(ctx sdk.Context, store sdk.KVStore, proofHeight exp
 
 		// NOTE: delay time period is inclusive, so if currentTimestamp is validTime, then we return no error
 		if currentTimestamp < validTime {
-			return sdkerrors.Wrapf(ErrDelayPeriodNotPassed, "cannot verify packet until time: %d, current time: %d",
+			return cosmossdkerrors.Wrapf(ErrDelayPeriodNotPassed, "cannot verify packet until time: %d, current time: %d",
 				validTime, currentTimestamp)
 		}
 
@@ -188,7 +191,7 @@ func verifyDelayPeriodPassed(ctx sdk.Context, store sdk.KVStore, proofHeight exp
 		// check that executing chain's height has passed consensusState's processed height + delay block period
 		processedHeight, ok := getProcessedHeight(store, proofHeight)
 		if !ok {
-			return sdkerrors.Wrapf(ErrProcessedHeightNotFound, "processed height not found for height: %s", proofHeight)
+			return cosmossdkerrors.Wrapf(ErrProcessedHeightNotFound, "processed height not found for height: %s", proofHeight)
 		}
 
 		currentHeight := clienttypes.GetSelfHeight(ctx)
@@ -196,7 +199,7 @@ func verifyDelayPeriodPassed(ctx sdk.Context, store sdk.KVStore, proofHeight exp
 
 		// NOTE: delay block period is inclusive, so if currentHeight is validHeight, then we return no error
 		if currentHeight.LT(validHeight) {
-			return sdkerrors.Wrapf(ErrDelayPeriodNotPassed, "cannot verify packet until height: %s, current height: %s",
+			return cosmossdkerrors.Wrapf(ErrDelayPeriodNotPassed, "cannot verify packet until height: %s, current height: %s",
 				validHeight, currentHeight)
 		}
 	}
