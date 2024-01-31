@@ -3,11 +3,13 @@ package types
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
+	commitmenttypes "github.com/cosmos/ibc-go/v7/modules/core/23-commitment/types"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 )
 
@@ -113,7 +115,35 @@ func (cs ClientState) VerifyMembership(
 		return sdkerrors.Wrap(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client")
 	}
 
-	h := sha256.Sum256(value)
+	// sha256(abi.encodePacked(height.toUint128(), sha256(prefix), sha256(path), sha256(value)))
+	revisionNumber := height.GetRevisionNumber()
+	revisionHeight := height.GetRevisionHeight()
+
+	heightBuf := make([]byte, 16)
+	binary.BigEndian.PutUint64(heightBuf[:8], revisionNumber)
+	binary.BigEndian.PutUint64(heightBuf[8:], revisionHeight)
+
+	merklePath := path.(commitmenttypes.MerklePath)
+	mPrefix, err := merklePath.GetKey(0)
+	if err != nil {
+		return sdkerrors.Wrapf(err, "invalid merkle path key at index 0")
+	}
+	mPath, err := merklePath.GetKey(1)
+	if err != nil {
+		return sdkerrors.Wrapf(err, "invalid merkle path key at index 1")
+	}
+
+	hashPrefix := sha256.Sum256([]byte(mPrefix))
+	hashPath := sha256.Sum256([]byte(mPath))
+	hashValue := sha256.Sum256([]byte(value))
+
+	var combined []byte
+	combined = append(combined, heightBuf...)
+	combined = append(combined, hashPrefix[:]...)
+	combined = append(combined, hashPath[:]...)
+	combined = append(combined, hashValue[:]...)
+	h := sha256.Sum256(combined)
+
 	if !bytes.Equal(proof, h[:]) {
 		return sdkerrors.Wrapf(ErrInvalidProof, "expected the proof '%X', actually got '%X'", h, proof)
 	}
