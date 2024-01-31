@@ -120,8 +120,8 @@ func (cs ClientState) VerifyMembership(
 	revisionHeight := height.GetRevisionHeight()
 
 	heightBuf := make([]byte, 16)
-	binary.LittleEndian.PutUint64(heightBuf[:8], revisionHeight)
-	binary.LittleEndian.PutUint64(heightBuf[8:], revisionNumber)
+	binary.BigEndian.PutUint64(heightBuf[:8], revisionNumber)
+	binary.BigEndian.PutUint64(heightBuf[8:], revisionHeight)
 
 	merklePath := path.(commitmenttypes.MerklePath)
 	mPrefix, err := merklePath.GetKey(0)
