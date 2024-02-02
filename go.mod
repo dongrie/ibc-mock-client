@@ -3,6 +3,7 @@ module github.com/datachainlab/ibc-mock-client
 go 1.21
 
 require (
+	cosmossdk.io/core v0.11.0
 	cosmossdk.io/errors v1.0.0
 	cosmossdk.io/store v1.0.1
 	github.com/cosmos/cosmos-sdk v0.50.1
@@ -15,7 +16,6 @@ require (
 require (
 	cosmossdk.io/api v0.7.2 // indirect
 	cosmossdk.io/collections v0.4.0 // indirect
-	cosmossdk.io/core v0.11.0 // indirect
 	cosmossdk.io/depinject v1.0.0-alpha.4 // indirect
 	cosmossdk.io/log v1.2.1 // indirect
 	cosmossdk.io/math v1.2.0 // indirect
