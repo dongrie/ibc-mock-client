@@ -46,3 +46,13 @@ func (a AppModuleBasic) GetTxCmd() *cobra.Command {
 func (AppModuleBasic) GetQueryCmd() *cobra.Command {
 	return nil
 }
+
+// AppModule is the application module for the Solomachine client module
+type AppModule struct {
+	AppModuleBasic
+}
+
+// NewAppModule creates a new Solomachine client module
+func NewAppModule() AppModule {
+	return AppModule{}
+}
